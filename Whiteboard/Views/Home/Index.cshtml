@@ -123,7 +123,8 @@ Color: <input id="brushColor" class="jscolor {onFineChange:'setSelfColor(this)'}
     function handleMouseDown(event) {
         if (!event.primary) { return; }
 
-        var p = { x: event.stageX, y: event.stageY, color: drawers['self'].color, drawer: 'self', stroke: getStrokeWidth() };
+        stroke = getStrokeWidth();
+        var p = { x: event.stageX, y: event.stageY, color: drawers['self'].color, drawer: 'self', stroke: stroke };
         startDraw(p);
         sendStartDraw(p);
 
@@ -134,11 +135,8 @@ Color: <input id="brushColor" class="jscolor {onFineChange:'setSelfColor(this)'}
         var drawer = drawers[p.drawer];
 
         color = '#' + p.color;
-        stroke = p.stroke;
         drawer.oldPt = new createjs.Point(p.x, p.y);
         drawer.oldMidPt = drawer.oldPt.clone();
-
-        drawingCanvas.graphics
 
         stage.update();
     }
@@ -146,7 +144,7 @@ Color: <input id="brushColor" class="jscolor {onFineChange:'setSelfColor(this)'}
     function handleMouseMove(event) {
         if (!event.primary) { return; }
 
-        var p = { x: event.stageX, y: event.stageY, color: drawers['self'].color, drawer: 'self' };
+        var p = { x: event.stageX, y: event.stageY, color: drawers['self'].color, drawer: 'self', stroke: stroke };
         moveDraw(p);
         sendMoveDraw(p);
     }
@@ -157,7 +155,7 @@ Color: <input id="brushColor" class="jscolor {onFineChange:'setSelfColor(this)'}
         var midPt = new createjs.Point(drawer.oldPt.x + p.x >> 1, drawer.oldPt.y + p.y >> 1);
 
         drawingCanvas.graphics.clear()
-            .setStrokeStyle(stroke, 'round', 'round')
+            .setStrokeStyle(p.stroke, 'round', 'round')
             .beginStroke('#' + p.color)
             .moveTo(midPt.x, midPt.y)
             .curveTo(drawer.oldPt.x, drawer.oldPt.y, drawer.oldMidPt.x, drawer.oldMidPt.y);
