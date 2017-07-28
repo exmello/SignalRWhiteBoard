@@ -1,0 +1,208 @@
+﻿
+@{
+    ViewBag.Title = "Index";
+}
+
+<style>
+    #whiteBoard {
+        margin: 20px;
+        width: 960px;
+        height: 600px;
+        border: 1px solid grey;
+        box-shadow: 2px 2px 4px grey;
+        background-color: #F9F9FF;
+        cursor: crosshair;
+    }
+    #strokeWidth {
+	    display: inline-block;
+	    width: 200px;
+        top: 4px;
+    }
+    #strokeWidthWrapper {
+        display: inline-block;
+        position: relative;
+    }
+</style>
+
+<canvas id="whiteBoard" width="960" height="600"></canvas>
+
+<br />
+Color: <input id="brushColor" class="jscolor {onFineChange:'setSelfColor(this)'}" value="FFB129" readonly="readonly" />
+<div id="strokeWidthWrapper">
+    <div id="strokeWidth"></div>
+</div>
+<button id="btnSave" onclick="save()">Save to server</button>
+<button id="btnClear" onclick="clearScreen()">Clear viewport</button>
+
+@section Scripts {
+<script>
+    var proxy, id, canvas, ctx, strokeWidth;
+    var drawers = { "self": { color: document.getElementById('brushColor').value } };
+    function init() {
+        canvas = document.getElementById("whiteBoard");
+        ctx = canvas.getContext("2d");
+
+        //check to see if we are running in a browser with touch support
+        stage = new createjs.Stage(canvas);
+        stage.autoClear = false;
+        stage.enableDOMEvents(true);
+
+        createjs.Touch.enable(stage);
+        createjs.Ticker.setFPS(24); //cinematic ayyyyyy
+
+        drawingCanvas = new createjs.Shape();
+
+        stage.addEventListener("stagemousedown", handleMouseDown);
+        stage.addEventListener("stagemouseup", handleMouseUp);
+
+        stage.addChild(drawingCanvas);
+        stage.update();
+
+        initConnection();
+    }
+    function initConnection() {
+        var connection = $.hubConnection('@Url.Content("~/")', 'whiteboardHub');
+        proxy = connection.createHubProxy('whiteboardHub');
+        proxy.connection.logging = true;
+        connection.start()
+        .done(function () {
+            console.log('connected: ' + connection.id);
+            id = connection.id;
+        }).fail(function () {
+            console.log('Could not connect');
+        });
+
+        proxy.on('startDraw', function (p) {
+            if (!(p.drawer in drawers))
+                drawers[p.drawer] = {};
+
+            startDraw(p);
+        });
+        proxy.on('moveDraw', function (p) {
+            if (!(p.drawer in drawers))
+                drawers[p.drawer] = {};
+
+            if ('oldPt' in drawers[p.drawer])
+                moveDraw(p);
+            else
+                startDraw(p);
+        });
+        proxy.on('loadImage', function (image) {
+            loadImage(image);
+        });
+    }
+    function save() {
+        var image = canvas.toDataURL('image/png', 0.9);
+        proxy.invoke('Save', image).done(function (response) {
+            //nothing?
+        })
+    };
+    function clearScreen() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    function loadImage(image) {
+        var img = new Image();
+        img.src = image;
+        img.onload = function () {
+            clearScreen();
+            ctx.drawImage(img, 0, 0);
+        }
+    }
+    function sendStartDraw(p) {
+        var sendPixel = { x: p.x, y: p.y, color: p.color, drawer: id, stroke: p.stroke };
+        proxy.invoke('StartDraw', sendPixel).done(function (response) {
+            //nothing?
+        });
+    }
+    function sendMoveDraw(p) {
+        var sendPixel = { x: p.x, y: p.y, color: p.color, drawer: id, stroke: p.stroke };
+        proxy.invoke('MoveDraw', sendPixel).done(function (response) {
+            //nothing?
+        });
+    }
+    function handleMouseDown(event) {
+        if (!event.primary) { return; }
+
+        var p = { x: event.stageX, y: event.stageY, color: drawers['self'].color, drawer: 'self', stroke: getStrokeWidth() };
+        startDraw(p);
+        sendStartDraw(p);
+
+        stage.addEventListener("stagemousemove", handleMouseMove);
+    }
+
+    function startDraw(p) {
+        var drawer = drawers[p.drawer];
+
+        color = '#' + p.color;
+        stroke = p.stroke;
+        drawer.oldPt = new createjs.Point(p.x, p.y);
+        drawer.oldMidPt = drawer.oldPt.clone();
+
+        drawingCanvas.graphics
+
+        stage.update();
+    }
+
+    function handleMouseMove(event) {
+        if (!event.primary) { return; }
+
+        var p = { x: event.stageX, y: event.stageY, color: drawers['self'].color, drawer: 'self' };
+        moveDraw(p);
+        sendMoveDraw(p);
+    }
+
+    function moveDraw(p) {
+        var drawer = drawers[p.drawer];
+
+        var midPt = new createjs.Point(drawer.oldPt.x + p.x >> 1, drawer.oldPt.y + p.y >> 1);
+
+        drawingCanvas.graphics.clear()
+            .setStrokeStyle(stroke, 'round', 'round')
+            .beginStroke('#' + p.color)
+            .moveTo(midPt.x, midPt.y)
+            .curveTo(drawer.oldPt.x, drawer.oldPt.y, drawer.oldMidPt.x, drawer.oldMidPt.y);
+
+        drawer.oldPt.x = p.x;
+        drawer.oldPt.y = p.y;
+
+        drawer.oldMidPt.x = midPt.x;
+        drawer.oldMidPt.y = midPt.y;
+
+        stage.update();
+    }
+
+    function setSelfColor(picker) {
+        drawers['self'].color = document.getElementById('brushColor').value
+    }
+    function getStrokeWidth() {
+        return Math.round(strokeWidth.noUiSlider.get());
+    }
+    function handleMouseUp(event) {
+        if (!event.primary) { return; }
+        stage.removeEventListener("stagemousemove", handleMouseMove);
+    }
+    
+    $(function () {
+        init();
+        strokeWidth = document.getElementById('strokeWidth');
+        noUiSlider.create(strokeWidth, {
+            start: [5],
+            step: 1,
+            tooltips: {
+                to: function (value) {
+                    return Math.round(value);
+                },
+                from: function (value) {
+                    return Math.round(value);
+                }
+            },
+            range: {
+                'min': [1],
+                'max': [50]
+            }
+        });
+
+    });
+
+</script>
+}
