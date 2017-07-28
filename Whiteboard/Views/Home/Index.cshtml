@@ -61,7 +61,7 @@ Color: <input id="brushColor" class="jscolor {onFineChange:'setSelfColor(this)'}
         initConnection();
     }
     function initConnection() {
-        var connection = $.hubConnection('@Url.Content("~/")', 'whiteboardHub');
+        var connection = $.hubConnection(location.protocol + '//' + location.hostname + '@Url.Content("~/")', 'whiteboardHub');
         proxy = connection.createHubProxy('whiteboardHub');
         proxy.connection.logging = true;
         connection.start()
